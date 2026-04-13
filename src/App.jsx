@@ -70,7 +70,7 @@ function exportPDF(r) {
     + '<div class="sec">Methode 1 \u2014 Op basis van MJOP (wettelijke voorkeur)</div>'
     + '<div class="grid2">'
     + '<div class="block"><div class="bh"><div class="tag">MJOP berekening</div><div class="name">Jaarlijkse dotatie</div></div>'
-    + rr('Totale MJOP-kosten', fmt(r.mjopTotaal)) + rr('Huidig saldo (aftrek)', fmt(r.huidigSaldo)) + rr('Netto te reserveren', fmt(r.netto)) + rr('Planperiode', r.planPeriode + ' jaar') + rr('Jaarlijkse MJOP-dotatie', fmt(r.dotatie))
+    + rr('Totale MJOP-kosten', fmt(r.mjopTotaal)) + rr('Planperiode', r.planPeriode + ' jaar') + rr('Jaarlijkse MJOP-dotatie', fmt(r.dotatie))
     + '</div>'
     + '<div class="block"><div class="bh"><div class="tag">Totale jaarlasten VvE</div><div class="name">Incl. exploitatiekosten</div></div>'
     + rr('MJOP-dotatie (jaarlijks)', fmt(r.dotatie)) + rr('Exploitatiekosten', fmt(r.exploitatie)) + rr('Totale jaarlasten VvE', fmt(r.jaarMjop)) + rrB('Maandlasten VvE totaal', r.hasMjop ? fmt(r.mndMjop) : '\u2014')
@@ -102,7 +102,6 @@ export default function App() {
   const [herbouwwaarde, setHerbouwwaarde] = useState('')
   const [mjopTotaal,    setMjopTotaal]    = useState('')
   const [planPeriode,   setPlanPeriode]   = useState('10')
-  const [huidigSaldo,   setHuidigSaldo]   = useState('')
   const [verzekering,   setVerzekering]   = useState('')
   const [administratie, setAdministratie] = useState('')
   const [overig,        setOverig]        = useState('')
@@ -116,11 +115,9 @@ export default function App() {
 
   const formula = (() => {
     const t = parseFloat(mjopTotaal) || 0
-    const s = parseFloat(huidigSaldo) || 0
     const p = parseFloat(planPeriode) || 10
-    if (!t) return 'Jaarlijkse dotatie = (Totale MJOP-kosten \u2212 Huidig saldo) \u00f7 Planperiode'
-    const netto = Math.max(0, t - s)
-    return '(' + fmt(t) + ' \u2212 ' + fmt(s) + ') \u00f7 ' + p + ' jaar = ' + fmt(netto / p) + ' jaarlijkse dotatie'
+    if (!t) return 'Jaarlijkse dotatie = Totale MJOP-kosten \u00f7 Planperiode'
+    return fmt(t) + ' \u00f7 ' + p + ' jaar = ' + fmt(t / p) + ' jaarlijkse dotatie'
   })()
 
   const breukCheck = (() => {
@@ -139,15 +136,13 @@ export default function App() {
     const hv = parseFloat(herbouwwaarde) || 0
     const mt = parseFloat(mjopTotaal) || 0
     const pp = parseFloat(planPeriode) || 10
-    const hs = parseFloat(huidigSaldo) || 0
     const vz = parseFloat(verzekering) || 0
     const ad = parseFloat(administratie) || 0
     const ov = parseFloat(overig) || 0
     const validRows = rows.filter(r => r.teller !== '' && r.noemer !== '' && parseFloat(r.noemer) > 0)
     if (!validRows.length) { setError('Voeg eerst eigenaren toe met breukdelen.'); return }
     if (!hv && !mt) { setError('Vul minimaal de herbouwwaarde of MJOP-kosten in.'); return }
-    const netto    = Math.max(0, mt - hs)
-    const dotatie  = mt > 0 ? netto / pp : 0
+    const dotatie  = mt > 0 ? mt / pp : 0
     const exploit  = vz + ad + ov
     const jaarMjop = dotatie + exploit
     const mndMjop  = jaarMjop / 12
@@ -160,7 +155,7 @@ export default function App() {
       const aandeel = totalFrac > 0 ? frac / totalFrac : 0
       return { naam: r.naam || ('App. ' + r.id), teller: r.teller, noemer: r.noemer, aandeel, bijdrMjop: mt > 0 ? aandeel * mndMjop : null, bijdr05: hv > 0 ? aandeel * mnd05 : null }
     })
-    setResult({ complexNaam: complexNaam || 'Complex', mjopTotaal: mt, huidigSaldo: hs, netto, planPeriode: pp, dotatie, exploitatie: exploit, jaarMjop, mndMjop, hasMjop: mt > 0, herbouwwaarde: hv, jaar05, jaar05Totaal: jaarTot05, mnd05, has05: hv > 0, eigenaren })
+    setResult({ complexNaam: complexNaam || 'Complex', mjopTotaal: mt, planPeriode: pp, dotatie, exploitatie: exploit, jaarMjop, mndMjop, hasMjop: mt > 0, herbouwwaarde: hv, jaar05, jaar05Totaal: jaarTot05, mnd05, has05: hv > 0, eigenaren })
     setTimeout(() => document.getElementById('res-anker')?.scrollIntoView({ behavior: 'smooth' }), 50)
   }
 
@@ -184,11 +179,10 @@ export default function App() {
         </Card>
 
         <SecTitle>Stap 2 — MJOP gegevens</SecTitle>
-        <Card header={<CardHdr icon="📋" bg={S.amberBg} title="Meerjarenonderhoudsplan (MJOP)" sub="Totale kosten over planperiode + huidig saldo" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, padding: '18px 20px 0' }}>
+        <Card header={<CardHdr icon="📋" bg={S.amberBg} title="Meerjarenonderhoudsplan (MJOP)" sub="Totale kosten over de planperiode" />}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '18px 20px 0' }}>
             <Field label="Totale MJOP-kosten (€)"><Inp type="number" placeholder="bijv. 150000" value={mjopTotaal} onChange={e => setMjopTotaal(e.target.value)} /></Field>
             <Field label="Planperiode (jaren)"><Inp type="number" placeholder="10" value={planPeriode} onChange={e => setPlanPeriode(e.target.value)} /></Field>
-            <Field label="Huidig saldo reservefonds (€)"><Inp type="number" placeholder="bijv. 45000" value={huidigSaldo} onChange={e => setHuidigSaldo(e.target.value)} /></Field>
           </div>
           <div style={{ margin: '10px 20px 18px', padding: '9px 13px', background: S.cream, border: '1px solid ' + S.border, borderRadius: 7, fontFamily: 'monospace', fontSize: 12, color: S.muted }}>{formula}</div>
         </Card>
@@ -251,7 +245,7 @@ export default function App() {
               \uD83D\uDDB6 Exporteer als PDF / Afdrukken
             </button>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-              <MethodBlock tag="Methode 1 \u2014 Wettelijke voorkeur" name="Op basis van MJOP" rows={[['Totale MJOP-kosten',fmt(result.mjopTotaal)],['Huidig saldo (aftrek)',fmt(result.huidigSaldo)],['Netto te reserveren',fmt(result.netto)],['Planperiode',result.planPeriode+' jaar'],['Jaarlijkse MJOP-dotatie',fmt(result.dotatie)],['Overige exploitatiekosten',fmt(result.exploitatie)],['Totale jaarlasten VvE',fmt(result.jaarMjop)]]} total={result.hasMjop ? fmt(result.mndMjop) : '\u2014'} />
+              <MethodBlock tag="Methode 1 \u2014 Wettelijke voorkeur" name="Op basis van MJOP" rows={[['Totale MJOP-kosten',fmt(result.mjopTotaal)],['Planperiode',result.planPeriode+' jaar'],['Jaarlijkse MJOP-dotatie',fmt(result.dotatie)],['Overige exploitatiekosten',fmt(result.exploitatie)],['Totale jaarlasten VvE',fmt(result.jaarMjop)]]} total={result.hasMjop ? fmt(result.mndMjop) : '\u2014'} />
               <MethodBlock tag="Methode 2 \u2014 Wettelijk minimum" name="0,5% van herbouwwaarde" rows={[['Herbouwwaarde',fmt(result.herbouwwaarde)],['0,5% jaarlijkse reservering',fmt(result.jaar05)],['Overige exploitatiekosten',fmt(result.exploitatie)],['Totale jaarlasten VvE',fmt(result.jaar05Totaal)],['Toelichting','Minimumeis bij geen/oud MJOP']]} total={result.has05 ? fmt(result.mnd05) : '\u2014'} />
             </div>
             <Card header={<CardHdr icon="\uD83D\uDD22" bg={S.redBg} title="Maandelijkse bijdrage per eigenaar" sub="Verdeling naar rato breukdeel" />}>
