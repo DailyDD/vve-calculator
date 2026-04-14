@@ -29,11 +29,16 @@ function buildExploitatieRows(r) {
 
 function exportPDF(r) {
   const eigenRows = r.eigenaren.map((e, i) => {
-    const diff = e.bijdrMjop !== null && e.bijdr05 !== null ? e.bijdrMjop - e.bijdr05 : null
-    const diffLabel = diff === null ? '—' : Math.abs(diff) < 0.01 ? 'Gelijk' : diff > 0 ? 'MJOP +' + fmt(Math.abs(diff)) : 'MJOP −' + fmt(Math.abs(diff))
-    const diffColor = diff === null ? '#8A7E7B' : Math.abs(diff) < 0.01 ? '#1A4D7A' : diff > 0 ? '#92550A' : '#2D6A4F'
     const bg = i % 2 === 0 ? '#ffffff' : '#FAF7F2'
-    return '<tr style="background:' + bg + '"><td>' + e.naam + '</td><td style="text-align:right">' + e.teller + '/' + e.noemer + '</td><td style="text-align:right">' + (e.aandeel * 100).toFixed(2) + '%</td><td style="text-align:right">' + (e.bijdrMjop !== null ? fmt(e.bijdrMjop) : '—') + '</td><td style="text-align:right">' + (e.bijdr05 !== null ? fmt(e.bijdr05) : '—') + '</td><td style="color:' + diffColor + ';font-weight:500">' + diffLabel + '</td></tr>'
+    const deltaStr = (nieuw, huidig) => {
+      if (nieuw === null || huidig === null) return '—'
+      const diff = nieuw - huidig
+      const pct = (diff / huidig * 100)
+      const sign = diff > 0.005 ? '+' : ''
+      const color = diff < -0.005 ? '#2D6A4F' : diff > 0.005 ? '#C0392B' : '#1A4D7A'
+      return '<span style="color:' + color + ';font-weight:600">' + sign + fmt(diff) + ' (' + sign + pct.toFixed(1) + '%)</span>'
+    }
+    return '<tr style="background:' + bg + '"><td>' + e.naam + '</td><td style="text-align:right">' + e.teller + '/' + e.noemer + '</td><td style="text-align:right">' + (e.aandeel * 100).toFixed(2) + '%</td><td style="text-align:right">' + (e.huidig !== null ? fmt(e.huidig) : '—') + '</td><td style="text-align:right">' + (e.bijdrMjop !== null ? fmt(e.bijdrMjop) : '—') + '</td><td>' + deltaStr(e.bijdrMjop, e.huidig) + '</td><td style="text-align:right">' + (e.bijdr05 !== null ? fmt(e.bijdr05) : '—') + '</td><td>' + deltaStr(e.bijdr05, e.huidig) + '</td></tr>'
   }).join('')
   const totMjop = r.hasMjop ? fmt(r.eigenaren.reduce((s, e) => s + (e.bijdrMjop || 0), 0)) : '—'
   const tot05 = r.has05 ? fmt(r.eigenaren.reduce((s, e) => s + (e.bijdr05 || 0), 0)) : '—'
@@ -104,10 +109,18 @@ function exportPDF(r) {
     + '</div></div>'
 
     + '<div class="sec">Maandelijkse bijdrage per eigenaar</div>'
-    + '<table><thead><tr><th>Eigenaar</th><th style="text-align:right">Breukdeel</th><th style="text-align:right">Aandeel</th><th style="text-align:right">MJOP/mnd</th><th style="text-align:right">0,5%/mnd</th><th>Verschil</th></tr></thead>'
+    + '<table><thead><tr><th>Eigenaar</th><th style="text-align:right">Breukdeel</th><th style="text-align:right">Aandeel</th><th style="text-align:right">Huidig/mnd</th><th style="text-align:right">MJOP/mnd</th><th>Δ MJOP</th><th style="text-align:right">0,5%/mnd</th><th>Δ 0,5%</th></tr></thead>'
     + '<tbody>' + eigenRows + '</tbody>'
-    + '<tfoot><tr><td><strong>Totaal VvE</strong></td><td></td><td style="text-align:right">100%</td><td style="text-align:right">' + totMjop + '</td><td style="text-align:right">' + tot05 + '</td><td></td></tr></tfoot>'
+    + '<tfoot><tr><td><strong>Totaal VvE</strong></td><td></td><td style="text-align:right">100%</td><td style="text-align:right">' + fmt(r.eigenaren.reduce((s,e)=>s+(e.huidig||0),0)) + '</td><td style="text-align:right">' + totMjop + '</td><td></td><td style="text-align:right">' + tot05 + '</td><td></td></tr></tfoot>'
     + '</table>'
+    + '<div class="sec">Jaarlijkse reservering voor onderhoud — VvE totaal</div>'
+    + '<p style="font-size:8.5pt;color:#8A7E7B;margin-bottom:10px">Reservering = (totale maandelijkse bijdragen × 12) − exploitatiekosten. Wat de VvE per jaar spaart voor onderhoud.</p>'
+    + '<table><thead><tr><th>Situatie</th><th>Toelichting</th><th style="text-align:right">Jaarlijkse reservering</th></tr></thead>'
+    + '<tbody>'
+    + '<tr style="background:#ffffff"><td><strong>Huidig</strong></td><td style="color:#8A7E7B">Op basis van huidige bijdragen</td><td style="text-align:right;font-weight:600;color:'+(r.jaarResHuidig!==null?(r.jaarResHuidig>=0?'#2D6A4F':'#C0392B'):'#8A7E7B')+'">'+(r.jaarResHuidig!==null?fmt(r.jaarResHuidig):'—')+'</td></tr>'
+    + '<tr style="background:#FAF7F2"><td><strong>Op basis van MJOP</strong></td><td style="color:#8A7E7B">Nieuwe bijdrage methode 1</td><td style="text-align:right;font-weight:600;color:'+(r.jaarResMjop!==null?(r.jaarResMjop>=0?'#2D6A4F':'#C0392B'):'#8A7E7B')+'">'+(r.jaarResMjop!==null?fmt(r.jaarResMjop):'—')+'</td></tr>'
+    + '<tr style="background:#ffffff"><td><strong>Op basis van 0,5%</strong></td><td style="color:#8A7E7B">Nieuwe bijdrage methode 2</td><td style="text-align:right;font-weight:600;color:'+(r.jaarRes05!==null?(r.jaarRes05>=0?'#2D6A4F':'#C0392B'):'#8A7E7B')+'">'+(r.jaarRes05!==null?fmt(r.jaarRes05):'—')+'</td></tr>'
+    + '</tbody></table>'
     + '<div class="note"><strong>Toelichting:</strong> Methode 1 (MJOP) verdient de voorkeur bij een actueel MJOP (&lt;5 jaar oud). Methode 2 (0,5%) is het wettelijk minimum conform art. 5:126 lid 3 BW (v.a. 1 jan 2021). Genoemde bedragen zijn minimale bijdragen — een aanvullende buffer is aan te raden.</div>'
     + '<div class="footer"><span>Totaal VvE Beheer Den Haag en omstreken B.V. · Rijswijk</span><span>' + today() + '</span></div>'
     + '</body></html>'
@@ -128,9 +141,9 @@ export default function App() {
   const [overig,        setOverig]        = useState('')
   const [extraKosten,   setExtraKosten]   = useState([])
   const [rows,          setRows]          = useState([
-    { id: uid(), naam: '', teller: '', noemer: '' },
-    { id: uid(), naam: '', teller: '', noemer: '' },
-    { id: uid(), naam: '', teller: '', noemer: '' },
+    { id: uid(), naam: '', teller: '', noemer: '', huidig: '' },
+    { id: uid(), naam: '', teller: '', noemer: '', huidig: '' },
+    { id: uid(), naam: '', teller: '', noemer: '', huidig: '' },
   ])
   const [result, setResult] = useState(null)
   const [error,  setError]  = useState('')
@@ -153,7 +166,7 @@ export default function App() {
     return { ok: Math.abs(total - 1) < 0.0011, pct: (total * 100).toFixed(3) }
   })()
 
-  const addRow = () => setRows(p => [...p, { id: uid(), naam: '', teller: '', noemer: '' }])
+  const addRow = () => setRows(p => [...p, { id: uid(), naam: '', teller: '', noemer: '', huidig: '' }])
   const delRow = (id) => setRows(p => p.filter(r => r.id !== id))
   const updRow = (id, f, v) => setRows(p => p.map(r => r.id === id ? { ...r, [f]: v } : r))
 
@@ -181,14 +194,20 @@ export default function App() {
     const eigenaren = validRows.map(r => {
       const frac = parseFloat(r.teller) / parseFloat(r.noemer)
       const aandeel = totalFrac > 0 ? frac / totalFrac : 0
-      return { naam: r.naam || ('App. ' + r.id), teller: r.teller, noemer: r.noemer, aandeel, bijdrMjop: mt > 0 ? aandeel * mndMjop : null, bijdr05: hv > 0 ? aandeel * mnd05 : null }
+      const huidig = parseFloat(r.huidig) || null
+      return { naam: r.naam || ('App. ' + r.id), teller: r.teller, noemer: r.noemer, aandeel, huidig, bijdrMjop: mt > 0 ? aandeel * mndMjop : null, bijdr05: hv > 0 ? aandeel * mnd05 : null }
     })
+    const somHuidig = validRows.reduce((s, r) => s + (parseFloat(r.huidig) || 0), 0)
+    const jaarResHuidig = somHuidig > 0 ? (somHuidig * 12) - exploit : null
+    const jaarResMjop   = mt > 0 ? (mndMjop * 12) - exploit : null
+    const jaarRes05     = hv > 0 ? (mnd05   * 12) - exploit : null
     setResult({
       complexNaam: complexNaam || 'Complex', mjopTotaal: mt, planPeriode: pp, dotatie,
       verzekering: vz, administratie: ad, bankkosten: bk, overig: ov,
       extraKosten: extraKosten.map(e => ({ naam: e.naam, bedrag: parseFloat(e.bedrag) || 0 })),
       exploitatie: exploit, jaarMjop, mndMjop, hasMjop: mt > 0,
-      herbouwwaarde: hv, jaar05, jaar05Totaal: jaarTot05, mnd05, has05: hv > 0, eigenaren
+      herbouwwaarde: hv, jaar05, jaar05Totaal: jaarTot05, mnd05, has05: hv > 0, eigenaren,
+      jaarResHuidig, jaarResMjop, jaarRes05
     })
     setTimeout(() => document.getElementById('res-anker')?.scrollIntoView({ behavior: 'smooth' }), 50)
   }
@@ -254,8 +273,8 @@ export default function App() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: S.cream, borderBottom: '1px solid ' + S.border }}>
-                  {['#','Naam / appartement','Breukdeel teller','Breukdeel noemer',''].map((h,i) => (
-                    <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: [36,null,150,150,44][i] }}>{h}</th>
+                  {['#','Naam / appartement','Breukdeel teller','Breukdeel noemer','Huidige bijdrage (€/mnd)',''].map((h,i) => (
+                    <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: [36,null,120,120,160,44][i] }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -266,6 +285,7 @@ export default function App() {
                     <td style={{ padding: '5px 6px' }}><Inp placeholder="bijv. App. 1 · De Vries" value={r.naam} onChange={e => updRow(r.id, 'naam', e.target.value)} /></td>
                     <td style={{ padding: '5px 6px' }}><Inp type="number" placeholder="1" value={r.teller} onChange={e => updRow(r.id, 'teller', e.target.value)} /></td>
                     <td style={{ padding: '5px 6px' }}><Inp type="number" placeholder="bijv. 100" value={r.noemer} onChange={e => updRow(r.id, 'noemer', e.target.value)} /></td>
+                    <td style={{ padding: '5px 6px' }}><Inp type="number" placeholder="bijv. 125" value={r.huidig} onChange={e => updRow(r.id, 'huidig', e.target.value)} /></td>
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       <button onClick={() => delRow(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: S.muted, padding: '2px 6px', borderRadius: 4 }}>×</button>
                     </td>
@@ -309,44 +329,88 @@ export default function App() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: S.cream, borderBottom: '1px solid ' + S.border }}>
-                      {['Eigenaar','Breukdeel','Aandeel %','Bijdrage MJOP/mnd','Bijdrage 0,5%/mnd','Verschil'].map((h,i) => (
-                        <th key={i} style={{ padding: '8px 12px', textAlign: i>1?'right':'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                      {['Eigenaar','Breukdeel','Aandeel %','Huidig/mnd','MJOP/mnd','Δ MJOP','0,5%/mnd','Δ 0,5%'].map((h,i) => (
+                        <th key={i} style={{ padding: '8px 10px', textAlign: i>1?'right':'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {result.eigenaren.map((e, i) => {
-                      const diff = e.bijdrMjop!==null && e.bijdr05!==null ? e.bijdrMjop - e.bijdr05 : null
-                      let tag = null
-                      if (diff!==null) {
-                        if (Math.abs(diff)<0.01) tag = <Tag c={S.blueBg} t={S.blue}>Gelijk</Tag>
-                        else if (diff>0) tag = <Tag c={S.amberBg} t={S.amber}>MJOP +{fmt(Math.abs(diff))}</Tag>
-                        else tag = <Tag c={S.greenBg} t={S.green}>MJOP −{fmt(Math.abs(diff))}</Tag>
+                      const diffMjop = e.huidig!==null && e.bijdrMjop!==null ? e.bijdrMjop - e.huidig : null
+                      const diffPct05 = e.huidig!==null && e.bijdr05!==null ? ((e.bijdr05 - e.huidig) / e.huidig * 100) : null
+                      const diffPctMjop = e.huidig!==null && e.bijdrMjop!==null ? ((e.bijdrMjop - e.huidig) / e.huidig * 100) : null
+                      const diff05 = e.huidig!==null && e.bijdr05!==null ? e.bijdr05 - e.huidig : null
+                      const deltaTag = (diff, pct) => {
+                        if (diff === null) return <span style={{color:S.muted}}>—</span>
+                        const pos = diff > 0.005
+                        const neg = diff < -0.005
+                        const color = neg ? S.green : pos ? '#C0392B' : S.blue
+                        const bg = neg ? S.greenBg : pos ? '#FDEAEB' : S.blueBg
+                        const sign = pos ? '+' : ''
+                        return <Tag c={bg} t={color}>{sign}{fmt(diff)} ({sign}{pct.toFixed(1)}%)</Tag>
                       }
                       return (
                         <tr key={i} style={{ borderBottom: i<result.eigenaren.length-1?'1px solid '+S.border:'none' }}>
-                          <td style={{ padding:'8px 12px',fontWeight:500,fontSize:13 }}>{e.naam}</td>
-                          <td style={{ padding:'8px 12px',fontFamily:'monospace',fontSize:13,textAlign:'right' }}>{e.teller}/{e.noemer}</td>
-                          <td style={{ padding:'8px 12px',fontFamily:'monospace',fontSize:13,textAlign:'right' }}>{(e.aandeel*100).toFixed(2)}%</td>
-                          <td style={{ padding:'8px 12px',fontFamily:'monospace',fontSize:13,textAlign:'right' }}>{e.bijdrMjop!==null?fmt(e.bijdrMjop):'—'}</td>
-                          <td style={{ padding:'8px 12px',fontFamily:'monospace',fontSize:13,textAlign:'right' }}>{e.bijdr05!==null?fmt(e.bijdr05):'—'}</td>
-                          <td style={{ padding:'8px 12px' }}>{tag||'—'}</td>
+                          <td style={{ padding:'8px 10px',fontWeight:500,fontSize:12 }}>{e.naam}</td>
+                          <td style={{ padding:'8px 10px',fontFamily:'monospace',fontSize:12,textAlign:'right' }}>{e.teller}/{e.noemer}</td>
+                          <td style={{ padding:'8px 10px',fontFamily:'monospace',fontSize:12,textAlign:'right' }}>{(e.aandeel*100).toFixed(2)}%</td>
+                          <td style={{ padding:'8px 10px',fontFamily:'monospace',fontSize:12,textAlign:'right' }}>{e.huidig!==null?fmt(e.huidig):<span style={{color:S.muted}}>—</span>}</td>
+                          <td style={{ padding:'8px 10px',fontFamily:'monospace',fontSize:12,textAlign:'right' }}>{e.bijdrMjop!==null?fmt(e.bijdrMjop):'—'}</td>
+                          <td style={{ padding:'8px 10px' }}>{deltaTag(diffMjop, diffPctMjop)}</td>
+                          <td style={{ padding:'8px 10px',fontFamily:'monospace',fontSize:12,textAlign:'right' }}>{e.bijdr05!==null?fmt(e.bijdr05):'—'}</td>
+                          <td style={{ padding:'8px 10px' }}>{deltaTag(diff05, diffPct05)}</td>
                         </tr>
                       )
                     })}
                   </tbody>
                   <tfoot style={{ borderTop: '2px solid ' + S.bordeaux }}>
                     <tr style={{ background: S.cream }}>
-                      <td colSpan={2} style={{ padding:'9px 12px',fontSize:13,fontWeight:600,color:S.muted }}>Totaal VvE</td>
-                      <td style={{ padding:'9px 12px',fontFamily:'monospace',fontSize:13,fontWeight:600,textAlign:'right' }}>100%</td>
-                      <td style={{ padding:'9px 12px',fontFamily:'monospace',fontSize:13,fontWeight:600,color:S.bordeaux,textAlign:'right' }}>{result.hasMjop?fmt(result.eigenaren.reduce((s,e)=>s+(e.bijdrMjop||0),0)):'—'}</td>
-                      <td style={{ padding:'9px 12px',fontFamily:'monospace',fontSize:13,fontWeight:600,color:S.bordeaux,textAlign:'right' }}>{result.has05?fmt(result.eigenaren.reduce((s,e)=>s+(e.bijdr05||0),0)):'—'}</td>
+                      <td colSpan={2} style={{ padding:'9px 10px',fontSize:13,fontWeight:600,color:S.muted }}>Totaal VvE</td>
+                      <td style={{ padding:'9px 10px',fontFamily:'monospace',fontSize:13,fontWeight:600,textAlign:'right' }}>100%</td>
+                      <td style={{ padding:'9px 10px',fontFamily:'monospace',fontSize:13,fontWeight:600,color:S.bordeaux,textAlign:'right' }}>{fmt(result.eigenaren.reduce((s,e)=>s+(e.huidig||0),0))}</td>
+                      <td style={{ padding:'9px 10px',fontFamily:'monospace',fontSize:13,fontWeight:600,color:S.bordeaux,textAlign:'right' }}>{result.hasMjop?fmt(result.eigenaren.reduce((s,e)=>s+(e.bijdrMjop||0),0)):'—'}</td>
+                      <td></td>
+                      <td style={{ padding:'9px 10px',fontFamily:'monospace',fontSize:13,fontWeight:600,color:S.bordeaux,textAlign:'right' }}>{result.has05?fmt(result.eigenaren.reduce((s,e)=>s+(e.bijdr05||0),0)):'—'}</td>
                       <td></td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
             </Card>
+
+            {/* JAARLIJKSE RESERVERING BLOK */}
+            <div style={{ marginTop: 16 }}>
+              <SecTitle>Jaarlijkse reservering voor onderhoud — VvE totaal</SecTitle>
+              <div style={{ background: '#fff', border: '1px solid #E5DEDA', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid #E5DEDA', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 7, background: '#EAF4EE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>💰</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Reservering = (totale maandelijkse bijdragen × 12) − exploitatiekosten</div>
+                    <div style={{ fontSize: 11, color: '#8A7E7B', marginTop: 1 }}>Wat de VvE per jaar spaart voor onderhoud na aftrek van vaste lasten</div>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0 }}>
+                  {[
+                    { label: 'Huidig', sub: 'Op basis van huidige bijdragen', value: result.jaarResHuidig, active: result.jaarResHuidig !== null },
+                    { label: 'Op basis van MJOP', sub: 'Nieuwe bijdrage methode 1', value: result.jaarResMjop, active: result.hasMjop },
+                    { label: 'Op basis van 0,5%', sub: 'Nieuwe bijdrage methode 2', value: result.jaarRes05, active: result.has05 },
+                  ].map((item, i) => (
+                    <div key={i} style={{ padding: '20px 24px', borderRight: i < 2 ? '1px solid #E5DEDA' : 'none' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8A7E7B', marginBottom: 4 }}>{item.label}</div>
+                      <div style={{ fontSize: 11, color: '#8A7E7B', marginBottom: 12 }}>{item.sub}</div>
+                      {item.active ? (
+                        <div style={{ fontFamily: 'Georgia,serif', fontSize: 26, color: item.value >= 0 ? '#2D6A4F' : '#C0392B', fontWeight: 400 }}>
+                          {fmt(item.value)}
+                          <div style={{ fontSize: 11, fontFamily: 'DM Sans,sans-serif', color: '#8A7E7B', marginTop: 4 }}>per jaar</div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 14, color: '#8A7E7B' }}>—</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
