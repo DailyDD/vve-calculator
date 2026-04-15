@@ -140,9 +140,13 @@ export default function App() {
   const [bankkosten,    setBankkosten]    = useState('')
   const [overig,        setOverig]        = useState('')
   const [extraKosten,   setExtraKosten]   = useState([])
-  const [bulkTekst,     setBulkTekst]     = useState('')
-  const [bulkOpen,      setBulkOpen]      = useState(false)
-  const [bulkFout,      setBulkFout]      = useState('')
+  const [bulkTekst,         setBulkTekst]         = useState('')
+  const [bulkOpen,          setBulkOpen]          = useState(false)
+  const [bulkFout,          setBulkFout]          = useState('')
+  const [bulkBijdrageTekst, setBulkBijdrageTekst] = useState('')
+  const [bulkBijdrageOpen,  setBulkBijdrageOpen]  = useState(false)
+  const [bulkBijdrageFout,  setBulkBijdrageFout]  = useState('')
+  const [vasteNoemer,   setVasteNoemer]   = useState('')
   const [rows,          setRows]          = useState([
     { id: uid(), naam: '', teller: '', huidig: '' },
     { id: uid(), naam: '', teller: '', huidig: '' },
@@ -247,6 +251,71 @@ export default function App() {
     setBulkTekst('')
   }
 
+  const parseBulkBijdrage = () => {
+    setBulkBijdrageFout('')
+    const maanden = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december']
+    const regels = bulkBijdrageTekst.trim().split('\n')
+    const bijdragenMap = {}
+    let huidigAdres = null
+    let huidigBedragen = []
+
+    const slaOp = () => {
+      if (huidigAdres && huidigBedragen.length) {
+        const nietNul = huidigBedragen.filter(b => b > 0)
+        if (nietNul.length) {
+          const teller = {}
+          nietNul.forEach(b => { teller[b] = (teller[b] || 0) + 1 })
+          const modus = Object.entries(teller).sort((a,b) => b[1]-a[1])[0][0]
+          bijdragenMap[huidigAdres.toLowerCase()] = parseFloat(modus)
+        }
+      }
+    }
+
+    for (const regel of regels) {
+      const eigenaarMatch = regel.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
+      if (eigenaarMatch && !maanden.some(m => regel.toLowerCase().startsWith(m)) && !regel.startsWith('Maand') && !regel.startsWith('Te goed') && !regel.startsWith('Achterstand') && !regel.startsWith('Totalen') && !regel.startsWith('Extra')) {
+        slaOp()
+        huidigAdres = eigenaarMatch[2].trim()
+        huidigBedragen = []
+        continue
+      }
+      const maandMatch = regel.match(/^(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\s+€\s+([\d\.]+,[\d]{2})/i)
+      if (maandMatch) {
+        const bedrag = parseFloat(maandMatch[2].replace(/\./g,'').replace(',','.'))
+        if (bedrag > 0) huidigBedragen.push(bedrag)
+      }
+    }
+    slaOp()
+
+    if (!Object.keys(bijdragenMap).length) {
+      setBulkBijdrageFout('Geen bijdragen herkend. Controleer het formaat.')
+      return
+    }
+
+    // Koppel aan bestaande eigenaren op basis van adres in naam
+    let gekoppeld = 0
+    setRows(prev => prev.map(r => {
+      const naamLower = r.naam.toLowerCase()
+      for (const [adres, bedrag] of Object.entries(bijdragenMap)) {
+        if (naamLower.includes(adres.toLowerCase())) {
+          gekoppeld++
+          return { ...r, huidig: String(bedrag.toFixed(2)) }
+        }
+      }
+      return r
+    }))
+
+    // Verwijder eigenaren zonder bijdrage (huidig leeg of 0)
+    setRows(prev => prev.filter(r => {
+      const h = parseFloat(r.huidig)
+      return !isNaN(h) && h > 0
+    }))
+
+    setBulkBijdrageOpen(false)
+    setBulkBijdrageTekst('')
+    if (gekoppeld === 0) setBulkBijdrageFout('Geen eigenaren gekoppeld. Zorg dat de eigenaren eerst zijn geïmporteerd via bulk import.')
+  }
+
   const bereken = () => {
     setError('')
     const hv = parseFloat(herbouwwaarde) || 0
@@ -267,7 +336,7 @@ export default function App() {
     const jaar05    = hv * 0.005
     const jaarTot05 = jaar05 + exploit
     const mnd05     = jaarTot05 / 12
-    const noemer    = validRows.reduce((s, r) => s + (parseFloat(r.teller) || 0), 0)
+    const noemer    = parseFloat(vasteNoemer) > 0 ? parseFloat(vasteNoemer) : validRows.reduce((s, r) => s + (parseFloat(r.teller) || 0), 0)
     const eigenaren = validRows.map(r => {
       const teller = parseFloat(r.teller) || 0
       const aandeel = noemer > 0 ? teller / noemer : 0
@@ -349,9 +418,19 @@ export default function App() {
 
           {/* BULK IMPORT */}
           <div style={{ padding: '12px 20px 0' }}>
-            <button onClick={() => setBulkOpen(p => !p)} style={{ padding: '8px 16px', background: bulkOpen ? S.bordeaux : '#fff', border: '1.5px solid ' + S.bordeaux, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: bulkOpen ? '#fff' : S.bordeaux, cursor: 'pointer', fontWeight: 500, marginBottom: 10 }}>
-              {bulkOpen ? '× Sluiten' : '↑ Bulk importeren via tekst'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button onClick={() => setBulkOpen(p => !p)} style={{ padding: '8px 16px', background: bulkOpen ? S.bordeaux : '#fff', border: '1.5px solid ' + S.bordeaux, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: bulkOpen ? '#fff' : S.bordeaux, cursor: 'pointer', fontWeight: 500 }}>
+                {bulkOpen ? '× Sluiten' : '↑ Bulk importeren via tekst'}
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Totaal breukdelen (noemer)</label>
+                <input type="number" placeholder="bijv. 5250" value={vasteNoemer} onChange={e => setVasteNoemer(e.target.value)}
+                  style={{ width: 120, padding: '7px 10px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 13, color: S.ink, background: S.cream, outline: 'none' }}
+                  onFocus={e => { e.target.style.borderColor = S.bordeaux; e.target.style.background = '#fff' }}
+                  onBlur={e => { e.target.style.borderColor = S.border; e.target.style.background = S.cream }}
+                />
+              </div>
+            </div>
             {bulkOpen && (
               <div style={{ background: S.cream, border: '1px solid ' + S.border, borderRadius: 10, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 12, color: S.muted, marginBottom: 8 }}>Plak hieronder de presentielijst of eigenaarstekst. De tool haalt naam, adres en breukdeel er automatisch uit.</div>
@@ -376,11 +455,39 @@ export default function App() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: S.cream, borderBottom: '1px solid ' + S.border }}>
-                  {['#','Naam / appartement','Breukdeel teller','Huidige bijdrage (€/mnd)',''].map((h,i) => (
-                    <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: [36,null,150,180,44][i] }}>{h}</th>
-                  ))}
+                  <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: 36 }}>#</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Naam / appartement</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: 150 }}>Breukdeel teller</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: 220 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      Huidige bijdrage (€/mnd)
+                      <button onClick={() => setBulkBijdrageOpen(p => !p)} title="Bulk importeren" style={{ padding: '2px 8px', background: bulkBijdrageOpen ? S.bordeaux : '#fff', border: '1px solid ' + S.bordeaux, borderRadius: 5, fontSize: 10, color: bulkBijdrageOpen ? '#fff' : S.bordeaux, cursor: 'pointer', fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>
+                        {bulkBijdrageOpen ? '× sluiten' : '↑ bulk'}
+                      </button>
+                    </div>
+                  </th>
+                  <th style={{ padding: '8px 10px', width: 44 }}></th>
                 </tr>
               </thead>
+              {bulkBijdrageOpen && (
+                <tbody>
+                  <tr>
+                    <td colSpan={5} style={{ padding: '12px 16px', background: S.cream }}>
+                      <div style={{ fontSize: 12, color: S.muted, marginBottom: 8 }}>Plak het overzicht ledenbijdragen. De tool pakt het vaakst voorkomende niet-nul bedrag per eigenaar en koppelt het aan het juiste adres.</div>
+                      <textarea
+                        value={bulkBijdrageTekst}
+                        onChange={e => setBulkBijdrageTekst(e.target.value)}
+                        placeholder="Plak hier het overzicht ledenbijdragen..."
+                        style={{ width: '100%', minHeight: 120, padding: '8px 10px', border: '1.5px solid ' + S.border, borderRadius: 7, fontFamily: 'monospace', fontSize: 12, color: S.ink, background: '#fff', outline: 'none', resize: 'vertical' }}
+                      />
+                      {bulkBijdrageFout && <div style={{ color: S.bordeaux, fontSize: 12, marginTop: 4 }}>⚠ {bulkBijdrageFout}</div>}
+                      <button onClick={parseBulkBijdrage} style={{ marginTop: 8, padding: '8px 18px', background: S.bordeaux, border: 'none', borderRadius: 7, fontFamily: 'inherit', fontSize: 13, color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+                        Verwerken →
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              )}
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={r.id} style={{ borderBottom: i < rows.length - 1 ? '1px solid ' + S.border : 'none' }}>
@@ -397,8 +504,10 @@ export default function App() {
             </table>
           </div>
           {breukCheck && (
-            <div style={{ margin: '8px 20px 4px', padding: '6px 10px', borderRadius: 6, fontSize: 12, fontFamily: 'monospace', background: S.greenBg, color: S.green }}>
-              {'✓ Totaal breukdelen: ' + totalTeller + ' — noemer wordt automatisch ingesteld op ' + totalTeller}
+            <div style={{ margin: '8px 20px 4px', padding: '6px 10px', borderRadius: 6, fontSize: 12, fontFamily: 'monospace', background: parseFloat(vasteNoemer) > 0 ? S.greenBg : S.amberBg, color: parseFloat(vasteNoemer) > 0 ? S.green : S.amber }}>
+              {parseFloat(vasteNoemer) > 0
+                ? '✓ Som tellers: ' + totalTeller + ' — noemer vastgesteld op ' + vasteNoemer
+                : '⚠ Som tellers: ' + totalTeller + ' — vul het totaal breukdelen in voor de juiste noemer'}
             </div>
           )}
           <button onClick={addRow} style={{ margin: '10px 20px', padding: '8px 14px', background: '#fff', border: '1.5px dashed ' + S.border, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: S.muted, cursor: 'pointer', width: 'calc(100% - 40px)' }}>
