@@ -126,7 +126,7 @@ function exportPDF(r) {
     + '</body></html>'
 
   const w = window.open('', '_blank', 'width=1050,height=850')
-  if (w) { w.document.write(html); w.document.close() }
+  if (w) { w.document.write(html); w.document.close(); w.document.title = 'VvE Bijdrage – ' + r.complexNaam }
   else alert('Pop-up geblokkeerd. Sta pop-ups toe voor deze pagina.')
 }
 
@@ -141,9 +141,9 @@ export default function App() {
   const [overig,        setOverig]        = useState('')
   const [extraKosten,   setExtraKosten]   = useState([])
   const [rows,          setRows]          = useState([
-    { id: uid(), naam: '', teller: '', noemer: '', huidig: '' },
-    { id: uid(), naam: '', teller: '', noemer: '', huidig: '' },
-    { id: uid(), naam: '', teller: '', noemer: '', huidig: '' },
+    { id: uid(), naam: '', teller: '', huidig: '' },
+    { id: uid(), naam: '', teller: '', huidig: '' },
+    { id: uid(), naam: '', teller: '', huidig: '' },
   ])
   const [result, setResult] = useState(null)
   const [error,  setError]  = useState('')
@@ -159,14 +159,14 @@ export default function App() {
     return fmt(t) + ' ÷ ' + p + ' jaar = ' + fmt(t / p) + ' jaarlijkse dotatie'
   })()
 
+  const totalTeller = rows.reduce((s, r) => s + (parseFloat(r.teller) || 0), 0)
   const breukCheck = (() => {
-    const filled = rows.filter(r => r.teller !== '' && r.noemer !== '' && parseFloat(r.noemer) > 0)
-    if (!filled.length) return null
-    const total = filled.reduce((s, r) => s + parseFloat(r.teller) / parseFloat(r.noemer), 0)
-    return { ok: Math.abs(total - 1) < 0.0011, pct: (total * 100).toFixed(3) }
+    const filled = rows.filter(r => r.teller !== '' && parseFloat(r.teller) > 0)
+    if (!filled.length || totalTeller === 0) return null
+    return { ok: true, totaal: totalTeller }
   })()
 
-  const addRow = () => setRows(p => [...p, { id: uid(), naam: '', teller: '', noemer: '', huidig: '' }])
+  const addRow = () => setRows(p => [...p, { id: uid(), naam: '', teller: '', huidig: '' }])
   const delRow = (id) => setRows(p => p.filter(r => r.id !== id))
   const updRow = (id, f, v) => setRows(p => p.map(r => r.id === id ? { ...r, [f]: v } : r))
 
@@ -180,7 +180,7 @@ export default function App() {
     const bk = parseFloat(bankkosten) || 0
     const ov = parseFloat(overig) || 0
     const extraTotaal = extraKosten.reduce((s, e) => s + (parseFloat(e.bedrag) || 0), 0)
-    const validRows = rows.filter(r => r.teller !== '' && r.noemer !== '' && parseFloat(r.noemer) > 0)
+    const validRows = rows.filter(r => r.teller !== '' && parseFloat(r.teller) > 0)
     if (!validRows.length) { setError('Voeg eerst eigenaren toe met breukdelen.'); return }
     if (!hv && !mt) { setError('Vul minimaal de herbouwwaarde of MJOP-kosten in.'); return }
     const dotatie   = mt > 0 ? mt / pp : 0
@@ -190,12 +190,12 @@ export default function App() {
     const jaar05    = hv * 0.005
     const jaarTot05 = jaar05 + exploit
     const mnd05     = jaarTot05 / 12
-    const totalFrac = validRows.reduce((s, r) => s + parseFloat(r.teller) / parseFloat(r.noemer), 0)
+    const noemer    = validRows.reduce((s, r) => s + (parseFloat(r.teller) || 0), 0)
     const eigenaren = validRows.map(r => {
-      const frac = parseFloat(r.teller) / parseFloat(r.noemer)
-      const aandeel = totalFrac > 0 ? frac / totalFrac : 0
+      const teller = parseFloat(r.teller) || 0
+      const aandeel = noemer > 0 ? teller / noemer : 0
       const huidig = parseFloat(r.huidig) || null
-      return { naam: r.naam || ('App. ' + r.id), teller: r.teller, noemer: r.noemer, aandeel, huidig, bijdrMjop: mt > 0 ? aandeel * mndMjop : null, bijdr05: hv > 0 ? aandeel * mnd05 : null }
+      return { naam: r.naam || ('App. ' + r.id), teller: r.teller, noemer: noemer, aandeel, huidig, bijdrMjop: mt > 0 ? aandeel * mndMjop : null, bijdr05: hv > 0 ? aandeel * mnd05 : null }
     })
     const somHuidig = validRows.reduce((s, r) => s + (parseFloat(r.huidig) || 0), 0)
     const jaarResHuidig = somHuidig > 0 ? (somHuidig * 12) - exploit : null
@@ -273,8 +273,8 @@ export default function App() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: S.cream, borderBottom: '1px solid ' + S.border }}>
-                  {['#','Naam / appartement','Breukdeel teller','Breukdeel noemer','Huidige bijdrage (€/mnd)',''].map((h,i) => (
-                    <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: [36,null,120,120,160,44][i] }}>{h}</th>
+                  {['#','Naam / appartement','Breukdeel teller','Huidige bijdrage (€/mnd)',''].map((h,i) => (
+                    <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', width: [36,null,150,180,44][i] }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -283,8 +283,7 @@ export default function App() {
                   <tr key={r.id} style={{ borderBottom: i < rows.length - 1 ? '1px solid ' + S.border : 'none' }}>
                     <td style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: 11, color: S.muted, padding: '7px 8px' }}>{i + 1}</td>
                     <td style={{ padding: '5px 6px' }}><Inp placeholder="bijv. App. 1 · De Vries" value={r.naam} onChange={e => updRow(r.id, 'naam', e.target.value)} /></td>
-                    <td style={{ padding: '5px 6px' }}><Inp type="number" placeholder="1" value={r.teller} onChange={e => updRow(r.id, 'teller', e.target.value)} /></td>
-                    <td style={{ padding: '5px 6px' }}><Inp type="number" placeholder="bijv. 100" value={r.noemer} onChange={e => updRow(r.id, 'noemer', e.target.value)} /></td>
+                    <td style={{ padding: '5px 6px' }}><Inp type="number" placeholder="bijv. 45" value={r.teller} onChange={e => updRow(r.id, 'teller', e.target.value)} /></td>
                     <td style={{ padding: '5px 6px' }}><Inp type="number" placeholder="bijv. 125" value={r.huidig} onChange={e => updRow(r.id, 'huidig', e.target.value)} /></td>
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       <button onClick={() => delRow(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: S.muted, padding: '2px 6px', borderRadius: 4 }}>×</button>
@@ -295,8 +294,8 @@ export default function App() {
             </table>
           </div>
           {breukCheck && (
-            <div style={{ margin: '8px 20px 4px', padding: '6px 10px', borderRadius: 6, fontSize: 12, fontFamily: 'monospace', background: breukCheck.ok ? S.greenBg : S.amberBg, color: breukCheck.ok ? S.green : S.amber }}>
-              {breukCheck.ok ? '✓ Breukdelen correct — totaal 100%' : '⚠ Breukdelen tellen op tot ' + breukCheck.pct + '% — controleer splitsingsakte'}
+            <div style={{ margin: '8px 20px 4px', padding: '6px 10px', borderRadius: 6, fontSize: 12, fontFamily: 'monospace', background: S.greenBg, color: S.green }}>
+              {'✓ Totaal breukdelen: ' + totalTeller + ' — noemer wordt automatisch ingesteld op ' + totalTeller}
             </div>
           )}
           <button onClick={addRow} style={{ margin: '10px 20px', padding: '8px 14px', background: '#fff', border: '1.5px dashed ' + S.border, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: S.muted, cursor: 'pointer', width: 'calc(100% - 40px)' }}>
