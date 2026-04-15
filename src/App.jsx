@@ -140,6 +140,9 @@ export default function App() {
   const [bankkosten,    setBankkosten]    = useState('')
   const [overig,        setOverig]        = useState('')
   const [extraKosten,   setExtraKosten]   = useState([])
+  const [bulkTekst,     setBulkTekst]     = useState('')
+  const [bulkOpen,      setBulkOpen]      = useState(false)
+  const [bulkFout,      setBulkFout]      = useState('')
   const [rows,          setRows]          = useState([
     { id: uid(), naam: '', teller: '', huidig: '' },
     { id: uid(), naam: '', teller: '', huidig: '' },
@@ -169,6 +172,80 @@ export default function App() {
   const addRow = () => setRows(p => [...p, { id: uid(), naam: '', teller: '', huidig: '' }])
   const delRow = (id) => setRows(p => p.filter(r => r.id !== id))
   const updRow = (id, f, v) => setRows(p => p.map(r => r.id === id ? { ...r, [f]: v } : r))
+
+  const parseBulk = () => {
+    setBulkFout('')
+    const skipPatterns = [/^Presentielijst/i, /^Locatie\s*:/i, /^Datum en tijd/i, /^Eigenaar\s+Adres/i, /^Powered by/i]
+    const regels = bulkTekst.trim().split('\n')
+      .map(r => r.trim())
+      .filter(r => r && !skipPatterns.some(p => p.test(r)))
+
+    const gevonden = []
+    const seen = new Set()
+
+    for (let i = 0; i < regels.length; i++) {
+      const regel = regels[i]
+      const volgende = i + 1 < regels.length ? regels[i + 1] : ''
+      const combined = regel + ' ' + volgende
+
+      const pcMatch = combined.match(/,?\s*(\d{4})\s*[A-Z]{2}/)
+      if (!pcMatch) continue
+
+      const voorPc = combined.slice(0, combined.indexOf(pcMatch[0])).trim().replace(/,$/, '')
+
+      const hnrMatch = voorPc.match(/\s+(A-\d+|\d+[A-Za-z]*)\s*$/)
+      if (!hnrMatch) continue
+
+      const hnrStr = hnrMatch[1].trim()
+      const voorHnr = voorPc.slice(0, voorPc.lastIndexOf(hnrMatch[0])).trim()
+
+      const straatMatch = voorHnr.match(/([A-Z][a-zA-Z\u00C0-\u024F]+(?:weg|straat|laan|plein|kade|dijk|gracht|singel|dreef|pad|steeg|hoek|markt)?(?:\s+[a-z][a-zA-Z\u00C0-\u024F]+)*)\s*$/)
+      if (!straatMatch) continue
+
+      const straat = straatMatch[1].trim()
+      const straatPos = voorHnr.lastIndexOf(straat)
+      let naam = voorHnr.slice(0, straatPos).trim()
+
+      if (!naam) {
+        const prev = []
+        let j = i - 1
+        while (j >= 0 && !/\d{4}\s*[A-Z]{2}/.test(regels[j]) && !/^0\d/.test(regels[j])) {
+          const pr = regels[j].trim()
+          if (pr && !/^D[A-Z]{1,2}$/.test(pr)) prev.unshift(pr)
+          j--
+        }
+        naam = prev.join(' ') || straat
+      }
+
+      // Breukdeel: zoek vooruit naar regel met @ of telefoonnummer
+      let breukdeel = null
+      for (let k = i; k < Math.min(i + 5, regels.length); k++) {
+        if (/@/.test(regels[k]) || /^0\d[\-\d]/.test(regels[k])) {
+          const nums = [...regels[k].matchAll(/\b(\d+)\b/g)].map(m => parseInt(m[1]))
+          if (nums.length) breukdeel = nums[nums.length - 1]
+          break
+        }
+      }
+      if (!breukdeel) continue
+
+      const adresKort = straat + ' ' + hnrStr
+      const naamDisplay = naam + ' - ' + adresKort
+      if (seen.has(naamDisplay)) continue
+      seen.add(naamDisplay)
+
+      const hnrNum = parseInt((hnrStr.match(/\d+/) || ['0'])[0])
+      const hnrLetter = hnrStr.replace(/[\d\-]/g, '').toUpperCase()
+
+      gevonden.push({ naam: naamDisplay, breukdeel, hnrNum, hnrLetter })
+    }
+
+    if (!gevonden.length) { setBulkFout('Geen eigenaren herkend. Controleer het formaat — zorg dat elke eigenaar een postcode (bijv. 2583 DS) en een e-mailadres of telefoonnummer heeft.'); return }
+    gevonden.sort((a, b) => a.hnrNum - b.hnrNum || a.hnrLetter.localeCompare(b.hnrLetter))
+    const nieuweRows = gevonden.map(e => ({ id: uid(), naam: e.naam, teller: String(e.breukdeel), huidig: '' }))
+    setRows(nieuweRows)
+    setBulkOpen(false)
+    setBulkTekst('')
+  }
 
   const bereken = () => {
     setError('')
@@ -269,6 +346,32 @@ export default function App() {
 
         <SecTitle>Stap 4 — Eigenaren &amp; breukdelen</SecTitle>
         <Card header={<CardHdr icon="👥" bg={S.greenBg} title="Eigenaren" sub="Naam en breukdeel conform splitsingsakte" />}>
+
+          {/* BULK IMPORT */}
+          <div style={{ padding: '12px 20px 0' }}>
+            <button onClick={() => setBulkOpen(p => !p)} style={{ padding: '8px 16px', background: bulkOpen ? S.bordeaux : '#fff', border: '1.5px solid ' + S.bordeaux, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: bulkOpen ? '#fff' : S.bordeaux, cursor: 'pointer', fontWeight: 500, marginBottom: 10 }}>
+              {bulkOpen ? '× Sluiten' : '↑ Bulk importeren via tekst'}
+            </button>
+            {bulkOpen && (
+              <div style={{ background: S.cream, border: '1px solid ' + S.border, borderRadius: 10, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: S.muted, marginBottom: 8 }}>Plak hieronder de presentielijst of eigenaarstekst. De tool haalt naam, adres en breukdeel er automatisch uit.</div>
+                <textarea
+                  value={bulkTekst}
+                  onChange={e => setBulkTekst(e.target.value)}
+                  placeholder="Plak hier de presentielijst of eigenaarstekst..."
+                  style={{ width: '100%', minHeight: 140, padding: '10px 12px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 12, color: S.ink, background: '#fff', outline: 'none', resize: 'vertical' }}
+                />
+                {bulkFout && <div style={{ color: S.bordeaux, fontSize: 12, marginTop: 6 }}>⚠ {bulkFout}</div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+                  <button onClick={parseBulk} style={{ padding: '9px 20px', background: S.bordeaux, border: 'none', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+                    Verwerken →
+                  </button>
+                  <span style={{ fontSize: 11, color: S.muted }}>Bestaande eigenaren worden vervangen</span>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
