@@ -123,16 +123,16 @@ function exportPDF(r) {
     + '</tbody></table>'
     + (r.eenmaligAan && r.eenmaligBerekend && r.eenmaligBerekend.length > 0 ? (
         '<div class="sec">Eenmalige bijdragen per eigenaar</div>'
-        + '<p style="font-size:8.5pt;color:#8A7E7B;margin-bottom:8px">Reserve: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(r.reserveStand) + ' — beschikbaar: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(Math.max(0,r.reserveStand-2500)) + ' — buffer \u20AC2.500 blijft altijd in reserve.</p>'
         + r.eenmaligBerekend.map(item =>
-            '<p style="font-size:9pt;font-weight:600;margin:10px 0 4px">' + item.omschrijving + ' \u2014 Offerte: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.offerte) + ' \u2014 Tekort: ' + (item.tekort > 0 ? new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.tekort) : '\u20AC 0,00 (volledig gedekt)') + '</p>'
+            '<p style="font-size:9pt;font-weight:600;margin:10px 0 2px">' + item.omschrijving + ' \u2014 Offerte: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.offerte) + (item.totaleKorting > 0 ? ' \u2014 Korting: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.totaleKorting) + ' \u2014 Netto: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.nettoOfferte) : '') + ' \u2014 Tekort: ' + (item.tekort > 0 ? new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.tekort) : '\u20AC 0,00 (volledig gedekt)') + '</p>'
+            + '<p style="font-size:8pt;color:#8A7E7B;margin-bottom:6px">Reserve: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.reserve) + ' \u2014 buffer: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.buffer) + ' \u2014 beschikbaar: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.beschikbaar) + '</p>'
             + (item.tekort > 0 ?
-              '<table><thead><tr><th>Eigenaar</th><th style="text-align:right">Aandeel</th><th style="text-align:right">Eenmalige bijdrage</th></tr></thead>'
-              + '<tbody>' + item.perEigenaar.map((e,i) => '<tr style="background:' + (i%2===0?'#fff':'#FAF7F2') + '"><td>' + e.naam + '</td><td style="text-align:right">' + (e.aandeel*100).toFixed(2) + '%</td><td style="text-align:right;font-weight:600;color:#991A21">' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(e.bijdrage) + '</td></tr>').join('') + '</tbody>'
-              + '<tfoot><tr><td colspan="2"><strong>Totaal tekort</strong></td><td style="text-align:right">' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.tekort) + '</td></tr></tfoot></table>'
+              '<table><thead><tr><th>Eigenaar</th><th style="text-align:right">Aandeel</th><th style="text-align:right">Gem. korting</th><th style="text-align:right">Eenmalige bijdrage</th></tr></thead>'
+              + '<tbody>' + item.perEigenaar.map((e,i) => '<tr style="background:' + (i%2===0?'#fff':'#FAF7F2') + '"><td>' + e.naam + '</td><td style="text-align:right">' + (e.aandeel*100).toFixed(2) + '%</td><td style="text-align:right;color:#2D6A4F">' + (e.korting > 0 ? new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(e.korting) : '\u2014') + '</td><td style="text-align:right;font-weight:600;color:#991A21">' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(e.bijdrage) + '</td></tr>').join('') + '</tbody>'
+              + '<tfoot><tr><td colspan="3"><strong>Totaal tekort</strong></td><td style="text-align:right">' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.tekort) + '</td></tr></tfoot></table>'
               : '')
           ).join('')
-        + '<p style="font-size:8.5pt;color:#92550A;background:#FEF3E2;padding:8px 12px;border-radius:4px;margin-top:10px">\u26A0 Opmerking: er blijft altijd minimaal \u20AC2.500 in het reservefonds als buffer voor onvoorziene kosten.</p>'
+        + '<p style="font-size:8.5pt;color:#92550A;background:#FEF3E2;padding:8px 12px;border-radius:4px;margin-top:10px">\u26A0 De buffer blijft altijd in het reservefonds als veiligheidsmarge voor onvoorziene kosten.</p>'
       ) : '')
     + '<div class="note"><strong>Toelichting:</strong> Methode 1 (MJOP) verdient de voorkeur bij een actueel MJOP (&lt;5 jaar oud). Methode 2 (0,5%) is het wettelijk minimum conform art. 5:126 lid 3 BW (v.a. 1 jan 2021). Genoemde bedragen zijn minimale bijdragen — een aanvullende buffer is aan te raden.</div>'
     + '<div class="footer"><span>Totaal VvE Beheer Den Haag en omstreken B.V. · Rijswijk</span><span>' + today() + '</span></div>'
@@ -161,8 +161,7 @@ export default function App() {
   const [bulkBijdrageFout,  setBulkBijdrageFout]  = useState('')
   const [vasteNoemer,     setVasteNoemer]     = useState('')
   const [eenmaligAan,     setEenmaligAan]     = useState(false)
-  const [reserveStand,    setReserveStand]     = useState('')
-  const [eenmaligItems,   setEenmaligItems]    = useState([{ id: uid(), omschrijving: '', bedrag: '' }])
+  const [eenmaligItems,   setEenmaligItems]    = useState([{ id: uid(), omschrijving: '', bedrag: '', reserveStand: '', buffer: '2500', kortingAan: false, kortingBedrag: '' }])
   const [rows,          setRows]          = useState([
     { id: uid(), naam: '', teller: '', huidig: '' },
     { id: uid(), naam: '', teller: '', huidig: '' },
@@ -344,7 +343,8 @@ export default function App() {
     const extraTotaal = extraKosten.reduce((s, e) => s + (parseFloat(e.bedrag) || 0), 0)
     const validRows = rows.filter(r => r.teller !== '' && parseFloat(r.teller) > 0)
     if (!validRows.length) { setError('Voeg eerst eigenaren toe met breukdelen.'); return }
-    if (!hv && !mt) { setError('Vul minimaal de herbouwwaarde of MJOP-kosten in.'); return }
+    const alleenEenmalig = eenmaligAan && !hv && !mt
+    if (!alleenEenmalig && !hv && !mt) { setError('Vul minimaal de herbouwwaarde of MJOP-kosten in.'); return }
     const dotatie   = mt > 0 ? mt / pp : 0
     const exploit   = vz + ad + bk + ov + extraTotaal
     const jaarMjop  = dotatie + exploit
@@ -363,20 +363,24 @@ export default function App() {
     const jaarResHuidig = somHuidig > 0 ? (somHuidig * 12) - exploit : null
     const jaarResMjop   = mt > 0 ? (mndMjop * 12) - exploit : null
     const jaarRes05     = hv > 0 ? (mnd05   * 12) - exploit : null
-    // Eenmalige bijdragen berekening
-    const reserve = parseFloat(reserveStand) || 0
-    const buffer = 2500
-    let beschikbaar = Math.max(0, reserve - buffer)
+    // Eenmalige bijdragen berekening — elke offerte heeft eigen reserve/buffer/korting
+    const aantalEigenaren = eigenaren.length
     const eenmaligBerekend = eenmaligAan ? eenmaligItems.map(item => {
       const offerte = parseFloat(item.bedrag) || 0
-      const tekort = Math.max(0, offerte - beschikbaar)
-      beschikbaar = Math.max(0, beschikbaar - offerte)
+      const reserve = parseFloat(item.reserveStand) || 0
+      const buffer = parseFloat(item.buffer) >= 0 ? parseFloat(item.buffer) : 2500
+      const kortingPerEigenaar = item.kortingAan ? (parseFloat(item.kortingBedrag) || 0) : 0
+      const totaleKorting = kortingPerEigenaar * aantalEigenaren
+      const nettoOfferte = Math.max(0, offerte - totaleKorting)
+      const beschikbaar = Math.max(0, reserve - buffer)
+      const tekort = Math.max(0, nettoOfferte - beschikbaar)
       const perEigenaar = noemer > 0 ? eigenaren.map(e => ({
         naam: e.naam,
         aandeel: e.aandeel,
-        bijdrage: tekort > 0 ? e.aandeel * tekort : 0
+        korting: kortingPerEigenaar,
+        bijdrage: tekort > 0 ? Math.max(0, e.aandeel * tekort - kortingPerEigenaar) : 0
       })) : []
-      return { omschrijving: item.omschrijving || 'Eenmalige bijdrage', offerte, tekort, perEigenaar }
+      return { omschrijving: item.omschrijving || 'Eenmalige bijdrage', offerte, nettoOfferte, totaleKorting, kortingPerEigenaar, reserve, buffer, beschikbaar, tekort, perEigenaar }
     }) : []
 
     setResult({
@@ -386,7 +390,7 @@ export default function App() {
       exploitatie: exploit, jaarMjop, mndMjop, hasMjop: mt > 0,
       herbouwwaarde: hv, jaar05, jaar05Totaal: jaarTot05, mnd05, has05: hv > 0, eigenaren,
       jaarResHuidig, jaarResMjop, jaarRes05,
-      eenmaligAan, reserveStand: reserve, eenmaligBerekend
+      eenmaligAan, alleenEenmalig, eenmaligBerekend
     })
     setTimeout(() => document.getElementById('res-anker')?.scrollIntoView({ behavior: 'smooth' }), 50)
   }
@@ -564,56 +568,111 @@ export default function App() {
                 <div style={{ width: 30, height: 30, borderRadius: 7, background: S.amberBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>💶</div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>Eenmalige bijdragen</div>
-                  <div style={{ fontSize: 11, color: S.muted, marginTop: 1 }}>Tekort = offertebedrag − (reserve − €2.500 buffer)</div>
+                  <div style={{ fontSize: 11, color: S.muted, marginTop: 1 }}>Elke offerte heeft een eigen reservestand, buffer en eventuele gemeentelijke korting</div>
                 </div>
               </div>
               <div style={{ padding: '16px 20px' }}>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Huidige stand reservefonds (€)</label>
-                  <input type="number" placeholder="bijv. 18500" value={reserveStand} onChange={e => setReserveStand(e.target.value)}
-                    style={{ width: 220, padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 14, color: S.ink, background: S.cream, outline: 'none' }}
-                    onFocus={e => { e.target.style.borderColor = S.bordeaux; e.target.style.background = '#fff' }}
-                    onBlur={e => { e.target.style.borderColor = S.border; e.target.style.background = S.cream }}
-                  />
-                  {parseFloat(reserveStand) > 0 && (
-                    <div style={{ fontSize: 12, color: S.muted, marginTop: 6, fontFamily: 'monospace' }}>
-                      Beschikbaar: {new Intl.NumberFormat('nl-NL', {style:'currency',currency:'EUR'}).format(Math.max(0, parseFloat(reserveStand) - 2500))} (na aftrek €2.500 buffer)
-                    </div>
-                  )}
-                </div>
-
-                {eenmaligItems.map((item, i) => (
-                  <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 180px 36px', gap: 10, marginBottom: 10, alignItems: 'center' }}>
-                    <div>
-                      {i === 0 && <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Omschrijving</label>}
-                      <input type="text" placeholder="bijv. Dakvervanging offerte Kees BV" value={item.omschrijving}
-                        onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, omschrijving: e.target.value} : x))}
-                        style={{ width: '100%', padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: S.ink, background: S.cream, outline: 'none' }}
-                        onFocus={e => { e.target.style.borderColor = S.bordeaux; e.target.style.background = '#fff' }}
-                        onBlur={e => { e.target.style.borderColor = S.border; e.target.style.background = S.cream }}
-                      />
-                    </div>
-                    <div>
-                      {i === 0 && <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Offertebedrag (€)</label>}
-                      <input type="number" placeholder="bijv. 24000" value={item.bedrag}
-                        onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, bedrag: e.target.value} : x))}
-                        style={{ width: '100%', padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 13, color: S.ink, background: S.cream, outline: 'none' }}
-                        onFocus={e => { e.target.style.borderColor = S.bordeaux; e.target.style.background = '#fff' }}
-                        onBlur={e => { e.target.style.borderColor = S.border; e.target.style.background = S.cream }}
-                      />
-                    </div>
-                    <div style={{ paddingTop: i === 0 ? 22 : 0 }}>
+                {eenmaligItems.map((item, i) => {
+                  const reserveVal = parseFloat(item.reserveStand) || 0
+                  const bufferVal = parseFloat(item.buffer) >= 0 ? parseFloat(item.buffer) : 2500
+                  const beschikbaar = Math.max(0, reserveVal - bufferVal)
+                  const kortingPE = item.kortingAan ? (parseFloat(item.kortingBedrag) || 0) : 0
+                  const aantalEig = rows.filter(r => r.teller !== '' && parseFloat(r.teller) > 0).length
+                  const totKorting = kortingPE * aantalEig
+                  const nettoOfferte = Math.max(0, (parseFloat(item.bedrag) || 0) - totKorting)
+                  const tekort = Math.max(0, nettoOfferte - beschikbaar)
+                  return (
+                    <div key={item.id} style={{ border: '1px solid ' + S.border, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: S.cream, position: 'relative' }}>
                       {eenmaligItems.length > 1 && (
                         <button onClick={() => setEenmaligItems(p => p.filter(x => x.id !== item.id))}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: S.muted, padding: '6px', borderRadius: 4 }}>×</button>
+                          style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: S.muted, padding: '2px 6px', borderRadius: 4 }}>×</button>
+                      )}
+                      <div style={{ fontSize: 11, fontWeight: 700, color: S.bordeaux, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Offerte {i + 1}</div>
+
+                      {/* Rij 1: omschrijving + offertebedrag */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 10, marginBottom: 10 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Omschrijving</label>
+                          <input type="text" placeholder="bijv. Dakvervanging offerte Kees BV" value={item.omschrijving}
+                            onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, omschrijving: e.target.value} : x))}
+                            style={{ width: '100%', padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: S.ink, background: '#fff', outline: 'none' }}
+                            onFocus={e => { e.target.style.borderColor = S.bordeaux }}
+                            onBlur={e => { e.target.style.borderColor = S.border }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Offertebedrag (€)</label>
+                          <input type="number" placeholder="bijv. 24000" value={item.bedrag}
+                            onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, bedrag: e.target.value} : x))}
+                            style={{ width: '100%', padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 13, color: S.ink, background: '#fff', outline: 'none' }}
+                            onFocus={e => { e.target.style.borderColor = S.bordeaux }}
+                            onBlur={e => { e.target.style.borderColor = S.border }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Rij 2: reservestand + buffer */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Huidige stand reservefonds (€)</label>
+                          <input type="number" placeholder="bijv. 18500" value={item.reserveStand}
+                            onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, reserveStand: e.target.value} : x))}
+                            style={{ width: '100%', padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 13, color: S.ink, background: '#fff', outline: 'none' }}
+                            onFocus={e => { e.target.style.borderColor = S.bordeaux }}
+                            onBlur={e => { e.target.style.borderColor = S.border }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Buffer in reserve (€)</label>
+                          <input type="number" placeholder="bijv. 2500" value={item.buffer}
+                            onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, buffer: e.target.value} : x))}
+                            style={{ width: '100%', padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 13, color: S.ink, background: '#fff', outline: 'none' }}
+                            onFocus={e => { e.target.style.borderColor = S.bordeaux }}
+                            onBlur={e => { e.target.style.borderColor = S.border }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Gemeentelijke korting */}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: item.kortingAan ? 8 : 0 }}>
+                        <input type="checkbox" checked={item.kortingAan}
+                          onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, kortingAan: e.target.checked} : x))}
+                          style={{ width: 14, height: 14, accentColor: S.bordeaux, cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: S.ink }}>Gemeentelijke korting</span>
+                      </label>
+                      {item.kortingAan && (
+                        <div style={{ marginBottom: 8 }}>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Korting per eigenaar (€)</label>
+                          <input type="number" placeholder="bijv. 1000" value={item.kortingBedrag}
+                            onChange={e => setEenmaligItems(p => p.map(x => x.id === item.id ? {...x, kortingBedrag: e.target.value} : x))}
+                            style={{ width: 200, padding: '8px 11px', border: '1.5px solid ' + S.border, borderRadius: 8, fontFamily: 'monospace', fontSize: 13, color: S.ink, background: '#fff', outline: 'none' }}
+                            onFocus={e => { e.target.style.borderColor = S.bordeaux }}
+                            onBlur={e => { e.target.style.borderColor = S.border }}
+                          />
+                          {kortingPE > 0 && aantalEig > 0 && (
+                            <div style={{ fontSize: 12, color: S.muted, marginTop: 4, fontFamily: 'monospace' }}>
+                              Totale korting: {kortingPE} × {aantalEig} eigenaren = {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(totKorting)}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Live preview */}
+                      {(reserveVal > 0 || parseFloat(item.bedrag) > 0) && (
+                        <div style={{ marginTop: 8, padding: '8px 12px', background: tekort > 0 ? S.redBg : S.greenBg, borderRadius: 7, fontSize: 12, fontFamily: 'monospace', color: tekort > 0 ? S.bordeaux : S.green }}>
+                          {item.kortingAan && totKorting > 0 && <div>Offerte na korting: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(nettoOfferte)}</div>}
+                          <div>Beschikbaar uit reserve: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(beschikbaar)} (na buffer {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(bufferVal)})</div>
+                          <div style={{ fontWeight: 700, marginTop: 2 }}>{tekort > 0 ? '⚠ Tekort: ' + new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(tekort) : '✓ Volledig gedekt door reserve'}</div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
 
-                <button onClick={() => setEenmaligItems(p => [...p, { id: uid(), omschrijving: '', bedrag: '' }])}
+                <button onClick={() => setEenmaligItems(p => [...p, { id: uid(), omschrijving: '', bedrag: '', reserveStand: '', buffer: '2500', kortingAan: false, kortingBedrag: '' }])}
                   style={{ padding: '8px 14px', background: '#fff', border: '1.5px dashed ' + S.border, borderRadius: 8, fontFamily: 'inherit', fontSize: 13, color: S.muted, cursor: 'pointer', width: '100%' }}>
-                  + Eenmalige bijdrage toevoegen
+                  + Offerte toevoegen
                 </button>
               </div>
             </div>
@@ -737,9 +796,7 @@ export default function App() {
                     <div style={{ width: 30, height: 30, borderRadius: 7, background: S.amberBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>💶</div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>Verdeling eenmalige bijdragen</div>
-                      <div style={{ fontSize: 11, color: S.muted, marginTop: 1 }}>
-                        Reserve: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(result.reserveStand)} — beschikbaar: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(Math.max(0, result.reserveStand - 2500))} — buffer €2.500 blijft altijd in reserve
-                      </div>
+                      <div style={{ fontSize: 11, color: S.muted, marginTop: 1 }}>Elke offerte is onafhankelijk berekend met eigen reservestand, buffer en korting</div>
                     </div>
                   </div>
                   {result.eenmaligBerekend.map((item, idx) => (
@@ -748,6 +805,7 @@ export default function App() {
                         <div>
                           <span style={{ fontWeight: 600, fontSize: 13 }}>{item.omschrijving}</span>
                           <span style={{ fontSize: 12, color: S.muted, marginLeft: 12 }}>Offerte: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.offerte)}</span>
+                          {item.totaleKorting > 0 && <span style={{ fontSize: 12, color: S.green, marginLeft: 8 }}>− {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.totaleKorting)} korting = {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.nettoOfferte)} netto</span>}
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <span style={{ fontFamily: 'Georgia,serif', fontSize: 18, color: item.tekort > 0 ? S.bordeaux : S.green }}>
@@ -755,12 +813,15 @@ export default function App() {
                           </span>
                         </div>
                       </div>
+                      <div style={{ padding: '6px 20px', background: '#fff', borderBottom: '1px solid ' + S.border, fontSize: 11, color: S.muted, fontFamily: 'monospace' }}>
+                        Reserve: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.reserve)} — buffer: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.buffer)} — beschikbaar: {new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.beschikbaar)}
+                      </div>
                       {item.tekort > 0 && (
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr style={{ background: '#FAF7F2', borderBottom: '1px solid ' + S.border }}>
-                                {['Eigenaar','Aandeel %','Eenmalige bijdrage'].map((h,i) => (
+                                {['Eigenaar','Aandeel %','Gem. korting','Eenmalige bijdrage'].map((h,i) => (
                                   <th key={i} style={{ padding: '7px 12px', textAlign: i>0?'right':'left', fontSize: 10, fontWeight: 600, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                                 ))}
                               </tr>
@@ -770,13 +831,14 @@ export default function App() {
                                 <tr key={i} style={{ borderBottom: i<item.perEigenaar.length-1?'1px solid '+S.border:'none', background: i%2===0?'#fff':'#FAF7F2' }}>
                                   <td style={{ padding:'7px 12px', fontSize:13, fontWeight:500 }}>{e.naam}</td>
                                   <td style={{ padding:'7px 12px', fontFamily:'monospace', fontSize:13, textAlign:'right' }}>{(e.aandeel*100).toFixed(2)}%</td>
+                                  <td style={{ padding:'7px 12px', fontFamily:'monospace', fontSize:13, textAlign:'right', color: e.korting > 0 ? S.green : S.muted }}>{e.korting > 0 ? new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(e.korting) : '—'}</td>
                                   <td style={{ padding:'7px 12px', fontFamily:'monospace', fontSize:13, textAlign:'right', color: S.bordeaux, fontWeight:600 }}>{new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(e.bijdrage)}</td>
                                 </tr>
                               ))}
                             </tbody>
                             <tfoot style={{ borderTop: '2px solid ' + S.bordeaux }}>
                               <tr style={{ background: '#F5E6E7' }}>
-                                <td colSpan={2} style={{ padding:'8px 12px', fontSize:13, fontWeight:600, color:S.muted }}>Totaal tekort</td>
+                                <td colSpan={3} style={{ padding:'8px 12px', fontSize:13, fontWeight:600, color:S.muted }}>Totaal tekort</td>
                                 <td style={{ padding:'8px 12px', fontFamily:'monospace', fontSize:13, fontWeight:600, color:S.bordeaux, textAlign:'right' }}>{new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'}).format(item.tekort)}</td>
                               </tr>
                             </tfoot>
@@ -786,7 +848,7 @@ export default function App() {
                     </div>
                   ))}
                   <div style={{ padding: '10px 20px', background: '#FEF3E2', borderTop: '1px solid ' + S.border, fontSize: 11, color: S.amber }}>
-                    ⚠ Opmerking: er blijft altijd minimaal €2.500 in het reservefonds als buffer voor onvoorziene kosten.
+                    ⚠ De buffer blijft altijd in het reservefonds als veiligheidsmarge voor onvoorziene kosten.
                   </div>
                 </div>
               </div>
