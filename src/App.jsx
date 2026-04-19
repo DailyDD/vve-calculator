@@ -245,11 +245,28 @@ export default function App() {
       for (let k = i; k < Math.min(i + 5, regels.length); k++) {
         if (/@/.test(regels[k]) || /^0\d[\-\d]/.test(regels[k])) {
           const nums = [...regels[k].matchAll(/\b(\d+)\b/g)].map(m => parseInt(m[1]))
-          if (nums.length) breukdeel = nums[nums.length - 1]
+          if (nums.length >= 2) breukdeel = nums[nums.length - 2]
+          else if (nums.length === 1) breukdeel = nums[0]
           break
         }
       }
       if (!breukdeel) continue
+
+      // Naam opschonen: alleen letters, tussenvoegsels, initialen — geen e-mail of getallen
+      naam = naam
+        .replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, '')
+        .replace(/\b\d+\b/g, '')
+        .split(/\s+/)
+        .filter(token => {
+          if (!token || token.length === 0) return false
+          if (/@/.test(token)) return false
+          if (/^\d/.test(token)) return false
+          if (/[0-9]{2,}/.test(token)) return false
+          return true
+        })
+        .join(' ')
+        .trim()
+      if (!naam) naam = straat
 
       const adresKort = straat + ' ' + hnrStr
       const naamDisplay = naam + ' - ' + adresKort
