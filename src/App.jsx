@@ -198,89 +198,115 @@ export default function App() {
 
   const parseBulk = () => {
     setBulkFout('')
-    const skipPatterns = [/^Presentielijst/i, /^Locatie\s*:/i, /^Datum en tijd/i, /^Eigenaar\s+Adres/i, /^Powered by/i]
-    const regels = bulkTekst.trim().split('\n')
+    const skipPatterns = [
+      /^Presentielijst/i, /^Locatie\s*:/i, /^Datum en tijd/i,
+      /^Eigenaar\s+Adres/i, /^Powered by/i, /^www\./i,
+      /Breukdelen\s+Stemmen/i
+    ]
+
+    const tekstSamen = bulkTekst.trim().split('\n')
       .map(r => r.trim())
       .filter(r => r && !skipPatterns.some(p => p.test(r)))
+      .join(' ')
+      .replace(/\s+/g, ' ')  // normaliseer dubbele spaties
+
+    const straatTypes = /(?:weg|straat|laan|plein|kade|dijk|gracht|singel|dreef|pad|steeg|hoek|markt|erf|hof)$/i
+
+    // Stap 1: verzamel alle adres+postcode matches
+    const blokRegex = /([A-Za-z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s\.]+?)\s+(\d+(?:\s*[+&]\s*\d+\s*[A-Za-z]*)?[A-Za-z]?),\s*(\d{4}\s*[A-Z]{2})/g
+    const alleMatches = []
+    let m
+    while ((m = blokRegex.exec(tekstSamen)) !== null) {
+      alleMatches.push({
+        index: m.index,
+        end: m.index + m[0].length,
+        volledig: m[1].trim(),
+        hnr: m[2].trim().replace(/\s+/g, ''),
+        pc: m[3].trim()
+      })
+    }
+
+    if (!alleMatches.length) {
+      setBulkFout('Geen eigenaren herkend. Zorg dat elk adres een postcode heeft (bijv. De La Reyweg 179, 2571 ED).')
+      return
+    }
+
+    // Stap 2: extraheer straat en breukdeel per match
+    // Breukdelen staan ná de postcodes — voor samengesmolten eigenaren staan ze samen ná de laatste postcode
+    // Strategie: verzamel per "groep" van aaneengesloten eigenaren zonder tussentekst de breukdelen samen
+
+    // Detecteer groepen: twee matches zijn samengesmolten als er geen getallen staan tussen hun postcodes
+    const heeftGetallen = (van, tot) => {
+      const stuk = tekstSamen.slice(van, tot).replace(/\b0\d[\d\-]{3,}\b/g, '').replace(/\S+@\S+/g, '')
+      return /\b[1-9]\d*\b/.test(stuk)
+    }
 
     const gevonden = []
     const seen = new Set()
 
-    for (let i = 0; i < regels.length; i++) {
-      const regel = regels[i]
-      const volgende = i + 1 < regels.length ? regels[i + 1] : ''
-      const combined = regel + ' ' + volgende
-
-      const pcMatch = combined.match(/,?\s*(\d{4})\s*[A-Z]{2}/)
-      if (!pcMatch) continue
-
-      const voorPc = combined.slice(0, combined.indexOf(pcMatch[0])).trim().replace(/,$/, '')
-
-      const hnrMatch = voorPc.match(/\s+(A-\d+|\d+[A-Za-z]*)\s*$/)
-      if (!hnrMatch) continue
-
-      const hnrStr = hnrMatch[1].trim()
-      const voorHnr = voorPc.slice(0, voorPc.lastIndexOf(hnrMatch[0])).trim()
-
-      const straatMatch = voorHnr.match(/([A-Z][a-zA-Z\u00C0-\u024F]+(?:weg|straat|laan|plein|kade|dijk|gracht|singel|dreef|pad|steeg|hoek|markt)?(?:\s+[a-z][a-zA-Z\u00C0-\u024F]+)*)\s*$/)
-      if (!straatMatch) continue
-
-      const straat = straatMatch[1].trim()
-      const straatPos = voorHnr.lastIndexOf(straat)
-      let naam = voorHnr.slice(0, straatPos).trim()
-
-      if (!naam) {
-        const prev = []
-        let j = i - 1
-        while (j >= 0 && !/\d{4}\s*[A-Z]{2}/.test(regels[j]) && !/^0\d/.test(regels[j])) {
-          const pr = regels[j].trim()
-          if (pr && !/^D[A-Z]{1,2}$/.test(pr)) prev.unshift(pr)
-          j--
-        }
-        naam = prev.join(' ') || straat
+    let i = 0
+    while (i < alleMatches.length) {
+      // Zoek hoe ver de samengesmolten groep loopt
+      let groepEinde = i
+      while (
+        groepEinde + 1 < alleMatches.length &&
+        !heeftGetallen(alleMatches[groepEinde].end, alleMatches[groepEinde + 1].index)
+      ) {
+        groepEinde++
       }
 
-      // Breukdeel: zoek vooruit naar regel met @ of telefoonnummer
-      let breukdeel = null
-      for (let k = i; k < Math.min(i + 5, regels.length); k++) {
-        if (/@/.test(regels[k]) || /^0\d[\-\d]/.test(regels[k])) {
-          const nums = [...regels[k].matchAll(/\b(\d+)\b/g)].map(m => parseInt(m[1]))
-          if (nums.length >= 2) breukdeel = nums[nums.length - 2]
-          else if (nums.length === 1) breukdeel = nums[0]
-          break
+      // Groep = alleMatches[i..groepEinde]
+      // Breukdelen staan ná alleMatches[groepEinde].end
+      const groepStart = i
+      const groepLen = groepEinde - i + 1
+      const tekstNaGroep = tekstSamen.slice(
+        alleMatches[groepEinde].end,
+        groepEinde + 1 < alleMatches.length ? alleMatches[groepEinde + 1].index : undefined
+      )
+      const schoon = tekstNaGroep
+        .replace(/\b0\d[\d\-]{3,}\b/g, '')
+        .replace(/\S+@\S+/g, '')
+        .replace(/Powered by TCPDF[^0-9]*/gi, '')
+      const getallen = [...schoon.matchAll(/\b([1-9]\d*)\b/g)].map(x => parseInt(x[1]))
+
+      // getallen patroon: [breuk1, stem1, breuk2, stem2, ...]
+      for (let g = 0; g < groepLen; g++) {
+        const match = alleMatches[i + g]
+        const woorden = match.volledig.split(/\s+/)
+        let straatStart = -1
+        for (let j = woorden.length - 1; j >= 0; j--) {
+          if (straatTypes.test(woorden[j])) {
+            straatStart = j
+            while (straatStart > 0 && /^(De|La|Le|Van|Te|Den|Der|Du|Des|El|da|di)$/i.test(woorden[straatStart - 1])) straatStart--
+            break
+          }
         }
+        if (straatStart < 0) continue
+
+        const straat = woorden.slice(straatStart).join(' ')
+        const adresKort = straat + ' ' + match.hnr
+        const hnrNum = parseInt((match.hnr.match(/\d+/) || ['0'])[0])
+
+        // breukdeel zit op positie g*2 in getallen array
+        const breukdeel = getallen[g * 2] || null
+        if (!breukdeel) continue
+
+        const uniekKey = adresKort + '|' + match.pc
+        if (seen.has(uniekKey)) continue
+        seen.add(uniekKey)
+
+        gevonden.push({ naam: adresKort, breukdeel, hnrNum })
       }
-      if (!breukdeel) continue
 
-      // Naam opschonen: alleen letters, tussenvoegsels, initialen — geen e-mail of getallen
-      naam = naam
-        .replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, '')
-        .replace(/\b\d+\b/g, '')
-        .split(/\s+/)
-        .filter(token => {
-          if (!token || token.length === 0) return false
-          if (/@/.test(token)) return false
-          if (/^\d/.test(token)) return false
-          if (/[0-9]{2,}/.test(token)) return false
-          return true
-        })
-        .join(' ')
-        .trim()
-      if (!naam) naam = straat
-
-      const adresKort = straat + ' ' + hnrStr
-      const naamDisplay = naam + ' - ' + adresKort
-      if (seen.has(naamDisplay)) continue
-      seen.add(naamDisplay)
-
-      const hnrNum = parseInt((hnrStr.match(/\d+/) || ['0'])[0])
-      const hnrLetter = hnrStr.replace(/[\d\-]/g, '').toUpperCase()
-
-      gevonden.push({ naam: naamDisplay, breukdeel, hnrNum, hnrLetter })
+      i = groepEinde + 1
     }
 
-    if (!gevonden.length) { setBulkFout('Geen eigenaren herkend. Controleer het formaat — zorg dat elke eigenaar een postcode (bijv. 2583 DS) en een e-mailadres of telefoonnummer heeft.'); return }
-    gevonden.sort((a, b) => a.hnrNum - b.hnrNum || a.hnrLetter.localeCompare(b.hnrLetter))
+    if (!gevonden.length) {
+      setBulkFout('Geen eigenaren herkend. Zorg dat elk adres een postcode heeft (bijv. De La Reyweg 179, 2571 ED).')
+      return
+    }
+
+    gevonden.sort((a, b) => a.hnrNum - b.hnrNum)
     const nieuweRows = gevonden.map(e => ({ id: uid(), naam: e.naam, teller: String(e.breukdeel), huidig: '' }))
     setRows(nieuweRows)
     setBulkOpen(false)
@@ -339,12 +365,6 @@ export default function App() {
         }
       }
       return r
-    }))
-
-    // Verwijder eigenaren zonder bijdrage (huidig leeg of 0)
-    setRows(prev => prev.filter(r => {
-      const h = parseFloat(r.huidig)
-      return !isNaN(h) && h > 0
     }))
 
     setBulkBijdrageOpen(false)
